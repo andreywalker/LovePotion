@@ -1,0 +1,152 @@
+using PotionCraft.Enum;
+using PotionCraft.ItemScripts;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+namespace PotionCraft.UIScripts
+{
+    public class DraggableUI : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
+    {
+        #region Fields
+        private Camera _camera;
+        private RectTransform _draggingObjectRectTransform;
+        private Image _image;
+        private Rigidbody2D _rigidbody2D;
+        private ItemUI _itemUI;
+        private float _dampingSpeed = 0.08f;
+        private Vector3 _velocity = Vector3.zero;
+        private Transform _previousParent;
+        private RectTransform cauldron;
+        private RectTransform menuPanel;
+        private RectTransform boilButton;
+
+        private Vector3 _globalMousePosition;
+        private bool _isDragging = false;
+        private Vector2 _screenPoint;
+        #endregion
+
+        #region Properties
+        private bool IsDragging
+        {
+            get => _isDragging;
+            set
+            {
+                _isDragging = value;
+
+                if (value == true)
+                {
+                    _itemUI.IsItemInInventory = false;
+                    _rigidbody2D.linearVelocity = Vector2.zero;
+                }
+
+                _image.raycastTarget = !_isDragging;
+            }
+        }
+        #endregion
+
+        #region Methods
+
+        private void Awake()
+        {
+            _draggingObjectRectTransform = transform as RectTransform;
+            _camera = Camera.main;
+            _itemUI = GetComponent<ItemUI>();
+            _rigidbody2D = GetComponent<Rigidbody2D>();
+            _image = GetComponent<Image>();
+			ResolveUIParents();
+        }
+
+        private void Update()
+        {
+            if (IsDragging)
+            {
+                if (RectTransformUtility.ScreenPointToWorldPointInRectangle(_draggingObjectRectTransform,
+                    _screenPoint, _camera, out _globalMousePosition))
+                {
+                    _draggingObjectRectTransform.position = Vector3.SmoothDamp(_draggingObjectRectTransform.position,
+                        _globalMousePosition, ref _velocity,
+                        _dampingSpeed);
+                }
+            }
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            _screenPoint = eventData.position;
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            IsDragging = true;
+
+            _previousParent = transform.parent;
+            _rigidbody2D.simulated = false;
+
+            transform.SetParent(transform.root);
+
+            if (eventData.pointerDrag.GetComponent<ItemUI>().Item.ItemType == ItemType.Ingredient)
+            {
+                transform.localScale = new Vector3(2, 2, 2);
+            }
+            else
+            {
+                transform.localScale = new Vector3(3, 3, 3);
+            }
+
+            if (_previousParent != transform.root)
+            {
+                Destroy(_previousParent.gameObject);
+            }
+            ResolveUIParents();
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            IsDragging = false;
+
+            if (transform.parent == transform.root)
+            {
+                _rigidbody2D.simulated = true;
+                ThrowItem(5);
+            }
+            else
+            {
+                _itemUI.IsItemInInventory = true;
+                _rigidbody2D.simulated = false;
+                transform.localScale = new Vector3(1, 1, 1);
+            }
+        }
+
+        private void ThrowItem(float forceMultiplier)
+        {
+        	ResolveUIParents();
+            _rigidbody2D.AddForce(_velocity * forceMultiplier);
+        }
+        
+        private void ResolveUIParents()
+        {
+            Canvas canvas = GetComponentInParent<Canvas>();
+            if (canvas == null)
+            {
+                Debug.LogError("DraggableUI: No Canvas found in parents.");
+                return;
+            }
+            boilButton = canvas.transform.Find("BoilButton") as RectTransform;
+            cauldron = canvas.transform.Find("CauldronSprite") as RectTransform;
+            menuPanel = canvas.transform.Find("MenuPanel") as RectTransform;
+            
+            if (cauldron == null || menuPanel == null || boilButton == null)
+            {
+                Debug.LogError("DraggableUI: CauldronImage or MenuPanel not found under Canvas.");
+            }
+            else{ 
+		        cauldron.SetAsLastSibling();
+		        boilButton.SetAsLastSibling();// temporarily last
+				menuPanel.SetAsLastSibling();  
+			}
+        }
+
+        #endregion
+    }
+}
